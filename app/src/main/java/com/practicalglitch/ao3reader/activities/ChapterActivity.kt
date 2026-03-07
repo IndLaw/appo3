@@ -503,6 +503,7 @@ fun ChapterActivityMenu(
 				)
 				{
 					IconButton(
+						enabled = !showBackward,  // disable
 						modifier = if(showBackward) Modifier.alpha(0f) else Modifier,
 						onClick = {
 							onChangeChapter(false)
@@ -521,6 +522,7 @@ fun ChapterActivityMenu(
 						)
 					}
 					IconButton(
+						enabled = !showForward,  // disable
 						modifier = if(showForward) Modifier.alpha(0f) else Modifier,
 						onClick = {
 						onChangeChapter(true)
