@@ -160,7 +160,7 @@ class Internet : ComponentActivity() {
 				try {
 					var chapters = ApiO3.DownloadWholeWork(work.Work.Id)
 					for(chapter in chapters) {
-						chapter.Body = chapter.Body.replace("\n", "\n<br>")
+						chapter.Body = chapter.Body?.replace("\n", "\n<br>") ?: ""
 						chapter.Downloaded = true
 					}
 					work.Work.Contents = chapters
@@ -170,6 +170,7 @@ class Internet : ComponentActivity() {
 					returnBool?.value = true
 				} catch (e: Exception) {
 					Log.d("Debug", "Failed to download work ${work.Work.Id} with reason: ${e}")
+					Log.d("Debug", "Stack trace: ${Log.getStackTraceString(e)}")
 					NavigationData.currentSnackbarHostState?.showSnackbar("Failed to download work. Are you connected to the internet?")
 				}
 			}
