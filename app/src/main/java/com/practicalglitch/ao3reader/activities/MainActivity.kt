@@ -83,6 +83,8 @@ import com.practicalglitch.ao3reader.activities.nav.Screen
 import com.practicalglitch.ao3reader.filterFrom
 import com.practicalglitch.ao3reader.isInFilter
 import com.practicalglitch.ao3reader.ui.theme.RederTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.apio3.Types.Fandom
 import org.apio3.Types.WorkChapter
 import rememberForeverLazyListState
@@ -137,6 +139,13 @@ fun makeSnackbarHost(): SnackbarHostState{
 	return snackbarHostState
 }
 
+// pull out appstate so cache isn't destroyed when swapping activities, may make into separate appstate file
+object AppState {
+	val savedWorkIDs = mutableStateListOf<String>()
+	val newChapters = mutableStateListOf<WorkChapter>()
+	val cacheReady = mutableStateOf(false)
+}
+
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -148,30 +157,34 @@ fun MainActivity(
 	// state 1 -> recent
 	// state 2 -> discover
 	val activityState = remember { mutableStateOf(0) }
-	val savedWorkIDs = remember { mutableListOf<String>() }
+	val savedWorkIDs = AppState.savedWorkIDs
 	
 	val updateProgress = remember { mutableStateOf(-1) }
-	val newChapters = remember { mutableStateListOf<WorkChapter>() }
+	val newChapters = AppState.newChapters
 	
 	val startupDialogue = remember { mutableStateOf(false) }
-	
-	val snackbarHostState = makeSnackbarHost()
-	
-	val bootup = remember { mutableStateOf(false) }
-	if(!bootup.value){
-		// Load saved work ids an
-		Storage.LoadSavedWorkIDs()
-		Storage.SavedWorkIDs.forEach { savedWorkIDs.add(it) }
 
-		Storage.LoadHistory()
-		Storage.LoadNewChapters()
-		// sync recomposing value with storage
-		newChapters.addAll(Storage.NewChapters.reversed())
-		Storage.LoadStatistics()
-		Storage.LoadSettings()
-		Storage.LoadFandomsList()
-		
-		bootup.value = true
+	val cacheReady = AppState.cacheReady
+
+	val snackbarHostState = makeSnackbarHost()
+
+	LaunchedEffect(Unit) {
+		if (AppState.cacheReady.value) return@LaunchedEffect
+		withContext(Dispatchers.IO) {
+			Storage.LoadSavedWorkIDs()
+			Storage.LoadHistory()
+			Storage.LoadNewChapters()
+			Storage.LoadStatistics()
+			Storage.LoadSettings()
+			Storage.LoadFandomsList()
+			// pre-cache all saved works while still on IO thread
+			for (id in Storage.SavedWorkIDs)
+				Storage.LoadSavedWork(id, false)
+		}
+		AppState.cacheReady.value = true
+		// back on main thread, safe to mutate compose state
+		Storage.SavedWorkIDs.forEach { AppState.savedWorkIDs.add(it) }
+		AppState.newChapters.addAll(Storage.NewChapters.reversed())
 	}
 	
 	LaunchedEffect(MainActivityData.openInAppWorkID != "") {
@@ -338,18 +351,16 @@ fun MainActivity(
 						modifier = Modifier
 							.padding(vertical = 6.dp)
 					) {
-						items(
-							items = savedWorkIDs
-						) { id ->
-							val work = Storage.LoadSavedWork(id, true)
-							if(work.Work == null){
+						items(items = savedWorkIDs) { id ->
+							if (!cacheReady.value) return@items
+							val work = Storage.CachedWorks.firstOrNull { it.Work.Id == id }
+							if (work?.Work == null) {
 								LibraryWorkCard(navController, id, false)
-							} else if(
-								(work.Work.Title.filterFrom(filterSearch.value) ||
-										filterSearch.value == "")
+							} else if (
+								(work.Work.Title.filterFrom(filterSearch.value) || filterSearch.value == "")
 								&& work.isInFilter(filters.value))
-								LibraryWorkCard(navController, id, false) }
-						
+								LibraryWorkCard(navController, id, false)
+						}
 					}
 				}
 				// If Recents
