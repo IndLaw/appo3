@@ -137,13 +137,15 @@ fun ChapterActivity(navController: NavController?, savedWork: SavedWork, inChapt
 	val scope = rememberCoroutineScope()
 	
 	val isAtBottom = columnScrollState.value == columnScrollState.maxValue
-	
-	if(loaded.value) {
-		// Add work to top of history
-		// Remove work if in history, and add it to the top
-		Storage.History.removeIf { it.WorkID == work.value.Work.Id }
-		Storage.History.add(0, work.value.Work.Contents[chapter.value.ChapterIndex - 1])
-		Storage.SaveHistory()
+
+	// Add work to top of history, Remove work if in history, and add it to the top
+	// prevent block from running on every composition, only run when loaded changes
+	LaunchedEffect(loaded.value) {
+		if(loaded.value) {
+			Storage.History.removeIf { it.WorkID == work.value.Work.Id }
+			Storage.History.add(0, work.value.Work.Contents[chapter.value.ChapterIndex - 1])
+			Storage.SaveHistory()
+		}
 	}
 	
 	// Downloads chapter
@@ -482,12 +484,18 @@ fun ChapterActivityMenu(
 						)
 					}
 				})
-			if(scrollState.maxValue != 0)
+			// the progress value is computed safely outside the lambda so it's never NaN, and the indicator is only rendered when progress is actually positive.
+			val progress = if (scrollState.maxValue > 0)
+				scrollState.value.toFloat() / scrollState.maxValue.toFloat()
+			else
+				0f
+
+			if (progress > 0f)
 				LinearProgressIndicator(
 					modifier = Modifier.fillMaxWidth(),
 					color = MaterialTheme.colorScheme.tertiary,
 					trackColor = Color(0x44, 0x47, 0x4f, 230),
-					progress = { scrollState.value.toFloat() / scrollState.maxValue.toFloat() }
+					progress = { progress }
 				)
 		}
 		
